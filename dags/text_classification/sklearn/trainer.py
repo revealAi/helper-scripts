@@ -114,10 +114,10 @@ class SklearnTrainer(Trainer):
 
         features = vectorizer.fit_transform(text).toarray()
         return vectorizer, features
-
+#https://stackoverflow.com/questions/49832981/whats-the-right-way-to-insert-a-calibratedclassifiercv-in-a-scikit-learn-pipeli
     def train(self):
         mlflow.set_experiment('1988')
-        with mlflow.start_run(run_name='testo') as run:
+        with mlflow.start_run(run_name='Pipeline') as run:
             try:
                 logging.info("Loading the data from directory ")
                 text, labels, target_names = load_dataset_label_studio(
@@ -157,12 +157,11 @@ class SklearnTrainer(Trainer):
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
                 local_path=os.path.join(os.path.dirname(__file__),'model_artifacts','infer.py')
 
-                mlflow.log_artifact(local_path=local_path,artifact_path="model/")
+                mlflow.log_artifact(local_path=local_path,artifact_path="model")
 
             except Exception as error:
                 logging.error(str(error))
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
-                print('getcwd:      ', os.getcwd())
                 raise error
 
     def train_with_split(self, model, X_train, y_train):
