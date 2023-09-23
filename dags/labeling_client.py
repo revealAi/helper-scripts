@@ -1,9 +1,12 @@
+import collections
 import os
 from os import path as osp
 
 from collections import Counter
 from enum import Enum
 from label_studio_sdk import Client as LabelingClient
+from sklearn import model_selection
+
 from dags.common.utils.data_util import export_yaml
 
 # Labeling server configuration
@@ -207,3 +210,48 @@ def get_NER_strucutred_cardinality(documents):
 
     counter = Counter(labels_extended)
     return dict(counter)
+
+
+
+def load_tcl_dataset_label_studio(project_id, categories, encoding="utf-8"):
+    """
+    @param directory:
+    @param encoding:
+    @return:
+
+    """
+    try:
+        client = LabelingGateway()
+        text_unfiltered, labels_unfiltered = client.get_TXC_dataset_from_project(
+            project_id
+        )
+
+        text, labels = [], []
+        for i, label_unfiltered in enumerate(labels_unfiltered):
+            if label_unfiltered in categories:
+                text.append(text_unfiltered[i])
+                labels.append(label_unfiltered)
+
+        target_names = list(set(labels))
+        return text, labels, target_names
+
+    except Exception as error:
+        raise error
+
+def get_data_cardinality(labels):
+    try:
+        counter = collections.Counter(labels)
+        return dict(counter)
+    except Exception as error:
+        raise error
+
+def train_test_split(features, labels, train_size=0.8, random_state=1988):
+    X_train, X_test, y_train, y_test = model_selection.train_test_split(
+        features,
+        labels,
+        train_size=train_size,
+        shuffle=True,
+        random_state=random_state,
+        stratify=labels,
+    )
+    return X_train, X_test, y_train, y_test

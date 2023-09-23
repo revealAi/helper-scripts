@@ -1,9 +1,6 @@
 from dags.text_classification.sklearn.trainer import SklearnTrainer
 
-pipeline = {'framework': 'sklearn', 'dataset': '1', 'categories': 'Inland@Wissenschaft',
-            'export_path': 'D:\\mlflow\\WA',
-            'logging': 'D:\\mlflow\\WA\\logger.log',
-            'logging_dir': 'D:\\mlflow\\WA\\model_log',
+pipeline = {'framework': 'sklearn', 'dataset': '1','run_name':'NER_tkl' , 'textflow_project_id':'1992',  'categories': 'Inland@Wissenschaft',
             'metadata': 'Text Classification',
             'vectorizer' : {'use_stopwords': True, 'lowercase': True, 'stemming': False, 'binary': False,
                             'type': 'TFIDF',

@@ -18,22 +18,20 @@ from nltk.corpus import stopwords
 from sklearn.model_selection import cross_val_score
 from sklearn.calibration import CalibratedClassifierCV
 from nltk.stem.snowball import SnowballStemmer
-
 from dags.common.trainer.trainer import Trainer
-from dags.common.utils.data_util import export_yaml, export_pickle
 import mlflow.sklearn
 
-
-from .data_loader import (
+from dags.labeling_client import (
     get_data_cardinality,
     train_test_split,
-    load_dataset_label_studio,
+    load_tcl_dataset_label_studio,
 )
 from .model_loader import create_model
-from .evaluate import classification_report
+from .sklearn_util import classification_report
 import mlflow
 
 from ...mlflow_util import log_classification_repot
+
 
 class SklearnTrainer(Trainer):
     vectorizer = None
@@ -69,8 +67,8 @@ class SklearnTrainer(Trainer):
         ngram_range = eval(self.config["vectorizer"]["ngram_range"])
         max_features = None
         if (
-            "max_features" in self.config["vectorizer"]
-            and self.config["vectorizer"]["max_features"] != "None"
+                "max_features" in self.config["vectorizer"]
+                and self.config["vectorizer"]["max_features"] != "None"
         ):
             max_features = self.config["vectorizer"]["max_features"]
 
@@ -114,13 +112,14 @@ class SklearnTrainer(Trainer):
 
         features = vectorizer.fit_transform(text).toarray()
         return vectorizer, features
-#https://stackoverflow.com/questions/49832981/whats-the-right-way-to-insert-a-calibratedclassifiercv-in-a-scikit-learn-pipeli
+
+    # https://stackoverflow.com/questions/49832981/whats-the-right-way-to-insert-a-calibratedclassifiercv-in-a-scikit-learn-pipeli
     def train(self):
-        mlflow.set_experiment('1988')
-        with mlflow.start_run(run_name='Pipeline') as run:
+        mlflow.set_experiment(self.config["textflow_project_id"])
+        with mlflow.start_run(run_name=self.config["run_name"]) as run:
             try:
                 logging.info("Loading the data from directory ")
-                text, labels, target_names = load_dataset_label_studio(
+                text, labels, target_names = load_tcl_dataset_label_studio(
                     self.config["dataset"], self.config["categories"]
                 )
                 logging.info(f'Training pipeline: {json.dumps(self.config)}')
@@ -139,25 +138,24 @@ class SklearnTrainer(Trainer):
                 mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
                 mlflow.log_text(json.dumps(self.cardinality), 'model/dataset_cardinality.json')
 
-
                 logging.info('Calibrate the trained model with CalibratedClassifierCV')
                 basic_model = create_model(self.config)
-                fitted_model = basic_model.fit(X_train, y_train)# self.train_with_split(basic_model, X_train, y_train)
+                fitted_model = basic_model.fit(X_train, y_train)  # self.train_with_split(basic_model, X_train, y_train)
 
                 self.model = CalibratedClassifierCV(estimator=fitted_model, cv='prefit')
-                self.model.fit( X_train, y_train)
+                self.model.fit(X_train, y_train)
 
                 logging.info('Generate and export multiclass classification report')
                 y_pred = self.model.predict(X_test)
                 self.report = classification_report(y_test, y_pred, target_names=target_names, output_dict=True)
-                logging.info(json.dumps(self.report ))
+                logging.info(json.dumps(self.report))
                 log_classification_repot(self.report)
 
                 logging.info('Finished Text Classification: ' + str(datetime.now()))
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
-                local_path=os.path.join(os.path.dirname(__file__),'model_artifacts','infer.py')
+                local_path = os.path.join(os.path.dirname(__file__), 'model_artifacts', 'infer.py')
 
-                mlflow.log_artifact(local_path=local_path,artifact_path="model")
+                mlflow.log_artifact(local_path=local_path, artifact_path="model")
 
             except Exception as error:
                 logging.error(str(error))
