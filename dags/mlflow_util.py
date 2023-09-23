@@ -1,5 +1,6 @@
 from pprint import pprint
 
+import mlflow
 from mlflow import MlflowClient
 
 MLFLOW_TRACKING_URI = 'http://localhost:5000'
@@ -32,5 +33,23 @@ def get_runs_list(experiment_id):
     return client.get_run(run_id=experiment_id)
 
 
+def log_classification_repot(report):
+    if isinstance(report, dict):
+        for class_or_avg, metrics_dict in report.items():
+            if isinstance(metrics_dict, dict):
+                for metric, value in metrics_dict.items():
+                    mlflow.log_metric('evaluate_' + class_or_avg + '_' + metric, value)
+            else:
+                mlflow.log_metric('evaluate_' + class_or_avg, metrics_dict)
+
+
+"""
+mlflow.sklearn.log_model(
+    sk_model=self.model,
+    artifact_path="sklearn-model",
+    signature=signature,
+    registered_model_name="Wael",
+)
+"""
 
 # https://github.com/mlflow/mlflow/issues/613

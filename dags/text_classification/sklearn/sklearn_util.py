@@ -16,10 +16,3 @@ for name, RegressorClass in estimators:
         print('*' * 50)
     except Exception as e:
         print(e)
-
-params={}
-for param in LinearRegression._parameter_constraints:
-    params['d']=''
-
-
-lr = LinearRegression(**params)

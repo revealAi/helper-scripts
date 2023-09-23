@@ -7,6 +7,9 @@ import os
 from datetime import datetime
 import json
 
+import logging
+from io import StringIO
+
 import nltk
 from mlflow.models import infer_signature
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -24,16 +27,20 @@ import mlflow.sklearn
 from .data_loader import (
     get_data_cardinality,
     train_test_split,
-    load_files_labeling,
+    load_dataset_label_studio,
 )
 from .model_loader import create_model
 from .evaluate import classification_report
 import mlflow
 
+from ...mlflow_util import log_classification_repot
+
 class SklearnTrainer(Trainer):
     vectorizer = None
     report = None
     mlflow.set_tracking_uri('http://localhost:5000')
+    mlflow.sklearn.autolog()
+    log_stream = StringIO()
 
     def __init__(self, config, from_label_Studio=True):
         self.model = None
@@ -41,6 +48,9 @@ class SklearnTrainer(Trainer):
         self.report = None
         self.config = config
         self.from_label_Studio = from_label_Studio
+
+        logging.basicConfig(stream=self.log_stream, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                            level=logging.INFO)
 
     def preprocess_text(self, text):
         text = text.lower()
@@ -106,119 +116,55 @@ class SklearnTrainer(Trainer):
         return vectorizer, features
 
     def train(self):
-        try:
-            self.create_logger()
-            # 1
-            logging.info("-------------- Loading the data from directory ")
-            text, labels, target_names = load_files_labeling(
-                self.config["dataset"], self.config["categories"]
-            )
-            logging.info(f'-------------- Training pipeline:')
-            logging.info(json.dumps(self.config, indent=50))
-            print(json.dumps(self.config, indent=50))
-            
-            # 2
-            
-            self.cardinality = get_data_cardinality(labels)
-            logging.info(f'-------------- Get data cardinality:')
-            print(f'-------------- Get data cardinality:')
-            logging.info(json.dumps(self.cardinality, indent=50))
-            print(json.dumps(self.cardinality, indent=50))
-            
-            
-            # 2-1 create workspace
-            self.create_workspace()
-
-            # 3
-            logging.info('-------------- Generate tfidf vectorizer')
-            print('-------------- Generate tfidf vectorizer')
-            self.vectorizer, features = self.fit_vectorizer(text)
-
-            # 4
-            logging.info('-------------- get train test split')
-            print('-------------- get train test split')
-            split = self.config['model']['split']
-            X_train, X_test, y_train, y_test = train_test_split(features, labels, split)
-
-            # 5
-            logging.info('-------------- train model')
-            print('-------------- train model')
-            # enable autologging
-            mlflow.set_experiment('TKL_2')
-            mlflow.sklearn.autolog()
-            print(mlflow.get_tracking_uri())
-            with mlflow.start_run(run_name = 'testo') as run:
-
-                basic_model = create_model(self.config)
-                fitted_model = self.train_with_split(basic_model, X_train, y_train)
-                self.model = CalibratedClassifierCV(base_estimator=fitted_model, cv='prefit')
-                self.model.fit( X_train, y_train)
-                y_pred = self.model.predict(X_test)
-                signature = infer_signature(X_test, y_pred)
-
-                # 6 evaluate model
-                logging.info('-------------- Generate and export multiclass classification report')
-                print('-------------- Generate and export multiclass classification report')
-                self.report = classification_report(y_test, y_pred, target_names=target_names, output_dict=True)
-                #mlflow.log_param("alpha", self.report)
-                # fetch logged data
-                # 7 export model
-                # save model information
-                self.export()
-                # Log the sklearn model and register as version 1
-                mlflow.sklearn.log_model(
-                    sk_model=self.model,
-                    artifact_path="sklearn-model",
-                    signature=signature,
-                    registered_model_name="Wael",
+        mlflow.set_experiment('1988')
+        with mlflow.start_run(run_name='testo') as run:
+            try:
+                logging.info("Loading the data from directory ")
+                text, labels, target_names = load_dataset_label_studio(
+                    self.config["dataset"], self.config["categories"]
                 )
+                logging.info(f'Training pipeline: {json.dumps(self.config)}')
+
+                self.cardinality = get_data_cardinality(labels)
+                logging.info(f'Get data cardinality: {json.dumps(self.cardinality)}')
+
+                logging.info('Generate tfidf vectorizer')
+                self.vectorizer, features = self.fit_vectorizer(text)
+
+                logging.info('Split dataset into training and evlaution subsets')
+                split = self.config['model']['split']
+                X_train, X_test, y_train, y_test = train_test_split(features, labels, split)
+
+                logging.info('Start model training')
+                mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
+                mlflow.log_text(json.dumps(self.cardinality), 'model/dataset_cardinality.json')
 
 
+                logging.info('Calibrate the trained model with CalibratedClassifierCV')
+                basic_model = create_model(self.config)
+                fitted_model = basic_model.fit(X_train, y_train)# self.train_with_split(basic_model, X_train, y_train)
 
+                self.model = CalibratedClassifierCV(estimator=fitted_model, cv='prefit')
+                self.model.fit( X_train, y_train)
 
+                logging.info('Generate and export multiclass classification report')
+                y_pred = self.model.predict(X_test)
+                self.report = classification_report(y_test, y_pred, target_names=target_names, output_dict=True)
+                logging.info(json.dumps(self.report ))
+                log_classification_repot(self.report)
 
-            logging.info('Finished Text Classification: ' + str(datetime.now()))
-            logging.info(json.dumps(self.report, indent=50))
-            print('Finished Text Classification: ' + str(datetime.now()))
-            print(json.dumps(self.report, indent=50))
-            logging.info('..............................................................')
+                logging.info('Finished Text Classification: ' + str(datetime.now()))
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
+                local_path=os.path.join(os.path.dirname(__file__),'model_artifacts','infer.py')
 
-        except Exception as error:
-            logging.error(str(error))
-            raise error
+                mlflow.log_artifact(local_path=local_path,artifact_path="model/")
+
+            except Exception as error:
+                logging.error(str(error))
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
+                print('getcwd:      ', os.getcwd())
+                raise error
 
     def train_with_split(self, model, X_train, y_train):
-        """
-        @param model:
-        @param X_train:
-        @param y_train:
-        @return:
-        """
-        logging.debug(
-            "||||||||||||||||| start training with model " + model.__class__.__name__
-        )
         model.fit(X_train, y_train)
-        logging.debug(
-            "||||||||||||||||| finish training model  " + model.__class__.__name__
-        )
         return model
-
-    def train_with_crossvalidation(self, model, features, labels, CV):
-        """
-        @param model:
-        @param features:
-        @param labels:
-        @param CV:
-        @return:
-        """
-        accuracies = cross_val_score(model, features, labels, scoring="accuracy", cv=CV)
-        return accuracies
-
-    def export(self):
-        export_path = self.config["export_path"]
-        model_path = os.path.join(export_path, "model.pkl")
-        vectorizer_path = os.path.join(export_path, "vectorizer.pkl")
-        metrics_path = os.path.join(export_path, "metrics.yaml")
-        export_pickle(vectorizer_path, self.vectorizer)
-        export_pickle(model_path, self.model)
-        export_yaml(self.report, metrics_path)

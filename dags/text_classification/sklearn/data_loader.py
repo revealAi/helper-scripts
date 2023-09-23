@@ -9,7 +9,7 @@ from sklearn import model_selection
 from dags.labeling_client import LabelingGateway
 
 
-def load_files_labeling(project_id, categories, encoding="utf-8"):
+def load_dataset_label_studio(project_id, categories, encoding="utf-8"):
     """
     @param directory:
     @param encoding:
