@@ -6,17 +6,28 @@ MLFLOW_TRACKING_URI = 'http://localhost:5000'
 
 client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+"""
+Area 1 - Fetch artifakt metadata and download
+"""
+
 def fetch_logged_data(run_id):
     data = client.get_run(run_id).data
     tags = {k: v for k, v in data.tags.items() if not k.startswith("mlflow.")}
     artifacts = [f.path for f in client.list_artifacts(run_id, "model")]
     return data.params, data.metrics, tags, artifacts
 
+def download_artifakts(run_id,dst_path):
 
-def download_artifakts(run_id):
     artifacts = [f.path for f in client.list_artifacts(run_id, "model")]
+    mlflow.artifacts.download_artifacts(run_id=run_id,dst_path=dst_path)
+
     return artifacts
 
+
+"""
+Area 2 - get list and delete of experiments, runs and registered models
+"""
 
 def get_all_experiments():
     all_experiments = client.search_experiments()
@@ -26,6 +37,15 @@ def get_all_experiments():
 def get_deleted_experiments():
     all_deleted_experiments = client.search_experiments(view_type=ViewType.DELETED_ONLY)
     return all_deleted_experiments
+
+
+def get_run(run_id):
+    return client.get_run(run_id=run_id)
+
+
+def get_runs_list(experiment_id):
+    all_runs = client.search_runs(experiment_ids=[experiment_id])
+    return all_runs
 
 
 def delete_experiment(experiment_id):
@@ -38,7 +58,11 @@ def restore_experiment(experiment_id):
 
 
 def get_runs_list(experiment_id):
-    all_runs = client.search_runs(experiment_ids=[experiment_id], view_type=ViewType.DELETED_ONLY)
+    all_runs = client.search_runs(experiment_ids=[experiment_id])
+    return all_runs
+
+def get_deleted_runs_list(experiment_id):
+    all_runs = client.search_runs(experiment_ids=[experiment_id], run_view_type=ViewType.DELETED_ONLY)
     return all_runs
 
 
@@ -46,28 +70,20 @@ def delete_run(run_id):
     client.delete_run(run_id=run_id)
 
 
+"""
+Area 3 - register, update model stage,...
+"""
+
 def register_model(run_id):
     run = get_run(run_id=run_id)
     mlflow.register_model(f'runs:/{run_id}/model',run.info.run_name)
-
-
 
 def get_registered_models():
     all_registered_models = client.search_registered_models()
     return all_registered_models
 
-#https://mlflow.org/docs/1.4.0/model-registry.html
 def update_model_stage(name,version,stage):
     client.update_model_version(name=name, version=version, stage = stage)
-
-def get_run(run_id):
-    return client.get_run(run_id=run_id)
-
-
-def get_runs_list(experiment_id):
-    all_runs = client.search_runs(experiment_ids=[experiment_id])
-    return all_runs
-
 
 def log_classification_repot(report):
     if isinstance(report, dict):
@@ -80,6 +96,8 @@ def log_classification_repot(report):
 
 
 """
+   #https://mlflow.org/docs/1.4.0/model-registry.html
+
     mlflow.sklearn.log_model(
         sk_model=self.model,
         artifact_path="sklearn-model",

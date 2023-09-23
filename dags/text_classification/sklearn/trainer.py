@@ -113,7 +113,6 @@ class SklearnTrainer(Trainer):
         features = vectorizer.fit_transform(text).toarray()
         return vectorizer, features
 
-    # https://stackoverflow.com/questions/49832981/whats-the-right-way-to-insert-a-calibratedclassifiercv-in-a-scikit-learn-pipeli
     def train(self):
         mlflow.set_experiment(self.config["textflow_project_id"])
         with mlflow.start_run(run_name=self.config["run_name"]) as run:
