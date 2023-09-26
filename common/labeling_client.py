@@ -233,7 +233,8 @@ def load_tcl_dataset_label_studio(project_id, categories, encoding="utf-8"):
                 labels.append(label_unfiltered)
 
         target_names = list(set(labels))
-        return text[:150], labels[:150], target_names
+        return text, labels, target_names
+        #return text[:150], labels[:150], target_names
 
     except Exception as error:
         raise error

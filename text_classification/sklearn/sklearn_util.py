@@ -1,9 +1,3 @@
-import inspect
-
-import sklearn
-from sklearn.linear_model import RidgeClassifierCV, LinearRegression
-from sklearn.utils import all_estimators
-
 from sklearn import metrics
 
 def classification_report(y_test, y_pred, target_names=None, output_dict=True):

@@ -1,17 +1,15 @@
+from ner.spacy.trainer import SpacyTrainer
 from text_classification.sklearn.trainer import SklearnTextflowTrainer
 
-pipeline = {'framework': 'sklearn', 'dataset': '1','run_name':'NER_tkl' , 'textflow_project_id':'1992',  'categories': 'Inland@Wissenschaft',
+pipeline = {'framework': 'sklearn', 'dataset': '2','run_name':'NER_SPACY' , 'textflow_project_id':'spacy_1992',  'categories': 'LOC@ORG',
             'metadata': 'Text Classification',
-            'vectorizer' : {'use_stopwords': True, 'lowercase': True, 'stemming': False, 'binary': False,
-                            'type': 'TFIDF',
-                            'analyzer': 'word',
-                            'min_df': 0.005, 'max_df': 0.999, 'stop_words': 'german', 'ngram_range': '(1,1)'},
-                           'model' : {'type': 'SVM', 'split': 0.8, 'kernel': 'rbf',
-                                      'decision_function_shape': 'ovr','max_iter': -1,'degree': 3
-                                      }
+            'model' : {'type': 'spacy', 'split': 0.8, 'iterations': 10,
+                        'drop': 0.2,'pretrained_model': 'de_core_news_sm'
+                      }
 }
 
-sk_trainer = SklearnTextflowTrainer(pipeline)
-sk_trainer.train()
+
+sp_trainer = SpacyTrainer(pipeline)
+sp_trainer.train()
 
 
