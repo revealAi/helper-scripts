@@ -20,6 +20,8 @@ from common.trainer.textflow_trainer import Textflow_Trainer
 import numpy as np
 import evaluate
 
+from text_classification.sklearn.sklearn_util import classification_report
+
 metric = evaluate.load("accuracy")
 
 class TransformerTextflowTrainer(Textflow_Trainer):
@@ -62,13 +64,15 @@ class TransformerTextflowTrainer(Textflow_Trainer):
     def label_map(self, lables):
         map={}
         label_set=list(set(lables))
+        id2Label={}
 
         for i in range(len(label_set)):
             map[label_set[i]]=i
+            id2Label[i]=label_set[i]
 
         mlflow.log_text(json.dumps({'labels': map}), 'model/labels_map.json')
 
-        return map
+        return map,id2Label
 
     def train(self):
         try:
@@ -84,7 +88,7 @@ class TransformerTextflowTrainer(Textflow_Trainer):
                 pretrained_model = self.config["model"]["distil_bert"]
 
                 text, labels, target_names = load_tcl_dataset_label_studio(self.config["dataset"], self.config["categories"])
-                labels_map=self.label_map(labels)
+                labels_map,id2Label=self.label_map(labels)
 
                 logging.info('Split dataset into training and evlaution subsets')
                 train_texts, val_texts, train_labels, val_labels = train_test_split(text, labels, split)
@@ -93,6 +97,8 @@ class TransformerTextflowTrainer(Textflow_Trainer):
                 val_labels = [labels_map[x] for x in val_labels]
 
                 model=AutoModelForSequenceClassification.from_pretrained(pretrained_model, num_labels=len(target_names))
+                model.config.id2label=id2Label
+                model.config.label2id=labels_map
                 tokenizer = AutoTokenizer.from_pretrained(pretrained_model)
 
                 train_inputs = tokenizer(train_texts, padding=True,max_length=max_length, truncation=True, return_tensors="pt")
@@ -100,7 +106,7 @@ class TransformerTextflowTrainer(Textflow_Trainer):
                 input_dataset = Dataset.from_dict(train_inputs)
 
                 validation_input=tokenizer(val_texts, padding=True, truncation=True,max_length=max_length, return_tensors="pt")
-                validation_input["label"] = torch.tensor(val_labels)
+                validation_input["labels"] = torch.tensor(val_labels)
                 validation_dataset = Dataset.from_dict(validation_input)
 
                 logging.info('Start model training')
@@ -133,35 +139,38 @@ class TransformerTextflowTrainer(Textflow_Trainer):
                 components = {"model": model, "tokenizer": tokenizer}
                 mlflow.transformers.log_model(transformers_model=components, artifact_path="model")
 
-                eval_dataloader = DataLoader(validation_dataset, batch_size=8)
+
+                inputs = tokenizer(val_texts, padding=True, truncation=True, max_length=max_length,
+                                             return_tensors="pt")
+
+                #eval_dataloader = DataLoader(inputs, batch_size=8)
                 predicted_categories=[]
-                for batch in eval_dataloader:
-                    batch = {k: v.to('cpu') for k, v in batch.items()}
-                    with torch.no_grad():
-                        outputs = model(**batch)
+                #for batch in eval_dataloader:
+                    #batch = {k: v.to('cpu') for k, v in batch.items()}
+                with torch.no_grad():
+                    outputs = model(**inputs)
 
-                    logits = outputs.logits
-                    predictions = torch.argmax(logits, dim=-1)
-                    predicted_categories.extend(predictions)
+                logits = outputs.logits
+                predictions = torch.argmax(logits, dim=-1)
 
+                predicted_categories= [id2Label[x.item()] for x in predictions]
+                val_labels= [id2Label[x] for x in val_labels]
                 print(f'predicted_categories:{predicted_categories}')
+                print(f'val_labels:{val_labels}')
 
-
-                self.report = {}# = classification_report(true_categories_argmax, predicted_categories, target_names=labels,output_dict=True)
+                self.report = classification_report(val_labels,predicted_categories,  output_dict=True)
                 logging.info(json.dumps(self.report))
                 log_classification_repot(self.report)
-                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
-
-                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
                 logging.info(f"Finished Text Classification: {str(datetime.now())}")
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
         except Exception as error:
             logging.error(str(error))
             mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
             raise error
 
-    def compute_metrics(eval_pred):
+    def compute_metrics(self,eval_pred):
         logits, labels = eval_pred
         predictions = np.argmax(logits, axis=-1)
         return metric.compute(predictions=predictions, references=labels)

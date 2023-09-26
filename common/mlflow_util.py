@@ -52,7 +52,6 @@ def get_runs_list(experiment_id):
 
 def delete_experiment(experiment_id):
     client.delete_experiment(experiment_id=experiment_id)
-    client.restore_experiment()
 
 
 def restore_experiment(experiment_id):

@@ -6,7 +6,7 @@ from sklearn.utils import all_estimators
 
 from sklearn import metrics
 
-def classification_report(y_test, y_pred, target_names, output_dict=True):
+def classification_report(y_test, y_pred, target_names=None, output_dict=True):
     metric_report = metrics.classification_report(y_test, y_pred, target_names=target_names,
                                                   output_dict=output_dict)
     return metric_report
