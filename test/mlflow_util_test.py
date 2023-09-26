@@ -2,7 +2,7 @@ from pprint import pprint
 
 import mlflow
 
-from dags.mlflow_util import fetch_logged_data, get_all_experiments, get_runs_list, delete_run, get_deleted_experiments, \
+from common.mlflow_util import fetch_logged_data, get_all_experiments, get_runs_list, delete_run, get_deleted_experiments, \
     register_model, get_registered_models, download_artifakts
 
 print("""######## download artifacts ########""")

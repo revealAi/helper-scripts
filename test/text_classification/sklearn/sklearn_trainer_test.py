@@ -1,4 +1,4 @@
-from dags.text_classification.sklearn.trainer import SklearnTrainer
+from text_classification.sklearn.trainer import SklearnTextflowTrainer
 
 pipeline = {'framework': 'sklearn', 'dataset': '1','run_name':'NER_tkl' , 'textflow_project_id':'1992',  'categories': 'Inland@Wissenschaft',
             'metadata': 'Text Classification',
@@ -11,7 +11,7 @@ pipeline = {'framework': 'sklearn', 'dataset': '1','run_name':'NER_tkl' , 'textf
                                       }
 }
 
-sk_trainer = SklearnTrainer(pipeline)
+sk_trainer = SklearnTextflowTrainer(pipeline)
 sk_trainer.train()
 
 
