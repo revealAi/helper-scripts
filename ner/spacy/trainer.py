@@ -16,11 +16,9 @@ from common.utils.data_util import export_yaml
 from common.mlflow_util import log_classification_repot
 import json
 import mlflow.spacy
-# spacy-specific functions
+
 from common.labeling_client import LabelingGateway
 from .data_util import (
-    convert_conll_to_spacy,
-    get_immediate_subfiles,
     get_spacy_trainingdata_cardinality,
     create_train_test_split,
     convert_conll_to_spacy_labeling,

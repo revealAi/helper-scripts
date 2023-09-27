@@ -6,7 +6,8 @@ import logging
 import os
 
 from ..utils import data_util as du
-
+import mlflow
+from io import StringIO
 
 class Textflow_Trainer:
     model = None
@@ -16,8 +17,13 @@ class Textflow_Trainer:
     target_names = None
     cardinality = None
 
+    mlflow.set_tracking_uri('http://localhost:5000')
+    log_stream = StringIO()
+
     def __init__(self):
         self.model = None
+        logging.basicConfig(stream=self.log_stream, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                            level=logging.INFO)
 
     def export(self):
         pass

@@ -1,34 +1,8 @@
-# Copyright (C) 2021 RevealAI
-#
-# SPDX-License-Identifier: MIT
-
-import os
 from collections import Counter
 import logging
 
 import spacy
 from sklearn.model_selection import train_test_split
-
-
-def convert_conll_to_spacy(conll_file, ner_model_name="de_core_news_sm"):
-    """
-    :param data_file:
-    When	WRB	O
-    Sebastian	NNP	B-PERSON
-    Thrun	NNP	I-PERSON
-    started	VBD	O
-    working	VBG	O
-    :return: spacy training data format
-    """
-
-    logging.info("||||||||||||||||| convert conll format to spacy training data")
-
-    with open(conll_file, encoding="utf-8", errors="ignore") as f:
-        example = f.read()
-    docs = spacy.training.converters.conll_ner_to_docs(example, model=ner_model_name)
-    training_data = convert_spacy_doc_to_training_data(docs)
-
-    return training_data
 
 
 def convert_conll_to_spacy_labeling(example, ner_model_name="de_core_news_sm"):
@@ -97,7 +71,3 @@ def convert_spacy_doc_to_training_data(docs):
             entities.append((entity.start_char, entity.end_char, entity.label_))
         training_data.append((doc.text, {"entities": entities}))
     return training_data
-
-
-def get_immediate_subfiles(path):
-    return [f.name for f in os.scandir(path) if f.is_file()]
