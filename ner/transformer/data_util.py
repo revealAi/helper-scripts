@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import re
 from collections import Counter
 import logging
 
 import spacy
 from sklearn.model_selection import train_test_split
-
+import datasets
+from datasets import Dataset
 
 
 def get_spacy_trainingdata_cardinality(training_data, cardinality):
@@ -34,41 +36,55 @@ def get_conll_trainingdata_cardinality(training_data, categories):
     """
 
     list_labels=[]
-    dataset=[]
+    raw_docs = re.split(r'\n\t?\n', training_data)
+    token_docs = []
+    tag_docs = []
+    ids = []
+    id = 0
+    for doc in raw_docs:
+        tokens = []
+        tags = []
+        ids.append(id)
+        id = id + 1
+        for line in doc.split('\n'):
+            if len(line)< 5:
+                continue
+            splitted = line.split()
+            token, tag = splitted[0], splitted[-1]
+            tokens.append(token)
 
-    externded_categories=[]
-    for cat in categories.split('@'):
-        externded_categories.append('B-'+cat)
-        externded_categories.append('I-' + cat)
+            if tag[2:] not in categories:
+                tag='O'
+            tags.append(tag)
+            list_labels.append(tag)
 
-    sentences= training_data.split('\n\n')
-    for sentence in sentences:
-        sentence_tokens=[]
-        sentence_tokens_labels=[]
+        token_docs.append(tokens)
+        tag_docs.append(tags)
 
-        for row in sentence.split('\n'):
-            if len(row)> 5:
-                splitted=row.split()
-                label=splitted[-1]
-                list_labels.append(label)
-                sentence_tokens.append(splitted[0])
-                if label in externded_categories:
-                    sentence_tokens_labels.append(label)
-                else:
-                    sentence_tokens_labels.append('O')
-        dataset.append({
-            'text_tokens':sentence_tokens,
-             'labels':sentence_tokens_labels
-        })
+    unique_tags = set(tag for doc in tag_docs for tag in doc)
+    tag2id = {tag: id for id, tag in enumerate(unique_tags)}
+    id2tag = {id: tag for tag, id in tag2id.items()}
+    ner_tags_ids = []
 
+    for doc in tag_docs:
+        doc_tags_ids = []
+        for tag in doc:
+            doc_tags_ids.append(tag2id[tag])
+        ner_tags_ids.append(doc_tags_ids)
 
-    entities_cardinality=Counter(list_labels)
-    cardinality = { key: value
-            for key, value in entities_cardinality.items()
-            if key in externded_categories }
+    dataset_dict = {'id': ids,
+                    'tokens': token_docs,
+                    'ner_tags': ner_tags_ids
+                    }
 
-    return  dataset, cardinality
+    dataset_ = Dataset.from_dict(dataset_dict)
 
+    entities_cardinality = Counter(list_labels)
+    cardinality = {key: value
+                   for key, value in entities_cardinality.items()
+                   }
+
+    return dataset_, list(unique_tags), tag2id, id2tag, cardinality
 
 
 def create_train_test_split(training_data, split=0.8, random_state=1):
