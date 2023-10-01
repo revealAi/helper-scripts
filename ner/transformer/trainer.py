@@ -63,6 +63,7 @@ class TransformerNerTrainer(Textflow_Trainer):
                 train_dataset, test_dataset, self.label_list, tag2id, id2tag, self.cardinality = get_conll_trainingdata_cardinality(
                     dataset, split, self.config["categories"])
 
+
                 logging.info("Data Cardinality:" + str(self.cardinality))
                 mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
                 mlflow.log_text(json.dumps(self.cardinality), 'model/dataset_cardinality.json')
@@ -77,6 +78,8 @@ class TransformerNerTrainer(Textflow_Trainer):
 
                 model = AutoModelForTokenClassification.from_pretrained(self.pretrained_model,
                                                                         num_labels=len(self.label_list))
+                model.id2label = id2tag
+                model.label2id = tag2id
 
                 args = TrainingArguments(
                     output_dir="./results",
