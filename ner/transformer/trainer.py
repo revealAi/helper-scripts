@@ -7,12 +7,11 @@ import logging
 import os
 from datetime import datetime
 
-import datasets
 import mlflow.transformers
 import numpy as np
 from datasets import metric, load_metric
 from transformers import AutoTokenizer, AutoModelForTokenClassification, \
-    TrainingArguments, Trainer, DataCollatorForTokenClassification
+    TrainingArguments, Trainer, DataCollatorForTokenClassification, TrainerCallback
 
 from common.labeling_client import LabelingGateway
 from common.mlflow_util import log_classification_repot
@@ -20,6 +19,11 @@ from common.trainer.textflow_trainer import Textflow_Trainer
 from .data_util import (
     create_train_test_split, get_conll_trainingdata_cardinality
 )
+
+
+class PrinterCallbackMLFlow(TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        logging.info(f"{logs}")
 
 
 class TransformerNerTrainer(Textflow_Trainer):
@@ -34,6 +38,8 @@ class TransformerNerTrainer(Textflow_Trainer):
         self.label_all_tokens = True
         self.label_list = []
         self.metric = load_metric("seqeval")
+        logging.basicConfig(stream=self.log_stream, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                            level=logging.INFO)
 
     def train(self):
 
@@ -41,7 +47,9 @@ class TransformerNerTrainer(Textflow_Trainer):
         with mlflow.start_run(run_name=self.config["run_name"]) as run:
             try:
                 mlflow.set_tag('model_flavor', 'transformer')
+
                 logging.info(f"config:{str(self.config)}")
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
                 self.pretrained_model = self.config["model"]["pretrained_model"]
                 dataset_path = self.config["dataset"]
@@ -52,8 +60,8 @@ class TransformerNerTrainer(Textflow_Trainer):
                 client = LabelingGateway()
                 dataset = client.get_NER_unstrucutred_dataset_from_project_CONNL(dataset_path)
 
-                dataset_, self.label_list, tag2id, id2tag, self.cardinality = get_conll_trainingdata_cardinality(
-                    dataset, self.config["categories"])
+                train_dataset, test_dataset, self.label_list, tag2id, id2tag, self.cardinality = get_conll_trainingdata_cardinality(
+                    dataset, split, self.config["categories"])
 
                 logging.info("Data Cardinality:" + str(self.cardinality))
                 mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
@@ -61,9 +69,11 @@ class TransformerNerTrainer(Textflow_Trainer):
 
                 train, test = create_train_test_split(dataset, split=split)
                 logging.info(f"Dataset Split( train:{len(train)},test:{len(test)}) {str(datetime.now())}")
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
                 self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model)
-                tokenized_datasets = dataset_.map(self.tokenize_and_align_labels, batched=True)
+                train_tokenized_datasets = train_dataset.map(self.tokenize_and_align_labels, batched=True)
+                test_tokenized_datasets = test_dataset.map(self.tokenize_and_align_labels, batched=True)
 
                 model = AutoModelForTokenClassification.from_pretrained(self.pretrained_model,
                                                                         num_labels=len(self.label_list))
@@ -74,28 +84,30 @@ class TransformerNerTrainer(Textflow_Trainer):
                     learning_rate=2e-5,
                     per_device_train_batch_size=batch_size,
                     per_device_eval_batch_size=batch_size,
-                    num_train_epochs=3,
+                    num_train_epochs=epochs,
                     weight_decay=0.01
                 )
 
                 data_collator = DataCollatorForTokenClassification(self.tokenizer)
 
-
                 trainer = Trainer(
                     model,
                     args,
-                    train_dataset=tokenized_datasets,
-                    eval_dataset=tokenized_datasets,
+                    train_dataset=train_tokenized_datasets,
+                    eval_dataset=test_tokenized_datasets,
                     data_collator=data_collator,
                     tokenizer=self.tokenizer,
-                    compute_metrics=self.compute_metrics
+                    compute_metrics=self.compute_metrics,
+                    callbacks=[PrinterCallbackMLFlow]
                 )
 
                 trainer.train()
 
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
+
                 trainer.evaluate()
 
-                predictions, labels, _ = trainer.predict(tokenized_datasets)
+                predictions, labels, _ = trainer.predict(test_tokenized_datasets)
                 predictions = np.argmax(predictions, axis=2)
 
                 # Remove ignored index (special tokens)
@@ -109,15 +121,14 @@ class TransformerNerTrainer(Textflow_Trainer):
                 ]
 
                 self.report = self.metric.compute(predictions=true_predictions, references=true_labels)
-
+                print(self.report)
                 logging.info('export model and metrics')
                 components = {"model": model, "tokenizer": self.tokenizer}
                 mlflow.transformers.log_model(transformers_model=components, artifact_path="model")
 
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
-
-                logging.info(json.dumps(self.report))
                 log_classification_repot(self.report)
+                logging.info(self.report)
 
                 logging.info(f"Finished transformer NER model training: {str(datetime.now())}")
                 local_path = os.path.join(os.path.dirname(__file__), 'model_artifacts', 'infer.py')
@@ -155,7 +166,7 @@ class TransformerNerTrainer(Textflow_Trainer):
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
-    def compute_metrics(self,p):
+    def compute_metrics(self, p):
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
 
