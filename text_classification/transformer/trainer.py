@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import datetime
 from io import StringIO
+from tempfile import mkdtemp
 
 import mlflow.transformers
 import tensorflow as tf
@@ -42,6 +43,7 @@ class TransformerTextflowTrainer(Textflow_Trainer):
         self.from_label_Studio = from_label_Studio
         logging.basicConfig(stream=self.log_stream, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                             level=logging.INFO)
+        self.output_folder_tmp = mkdtemp()
 
     def log_metadata(self,labels_all):
         # 3
@@ -113,7 +115,7 @@ class TransformerTextflowTrainer(Textflow_Trainer):
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
                 training_args = TrainingArguments(
-                    output_dir='./results',# output directory
+                    output_dir=self.output_folder_tmp,# output directory
                     evaluation_strategy="epoch",
                     num_train_epochs=epochs,  # total number of training epochs
                     per_device_train_batch_size=batch_size,  # batch size per device during training

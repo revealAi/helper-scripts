@@ -6,12 +6,13 @@ import json
 import logging
 import os
 from datetime import datetime
+from tempfile import mkdtemp
 
 import mlflow.transformers
 import numpy as np
 from datasets import metric, load_metric
 from transformers import AutoTokenizer, AutoModelForTokenClassification, \
-    TrainingArguments, Trainer, DataCollatorForTokenClassification, TrainerCallback
+    TrainingArguments, Trainer, DataCollatorForTokenClassification, TrainerCallback, TrainerState, TrainerControl
 
 from common.labeling_client import LabelingGateway
 from common.mlflow_util import log_classification_repot
@@ -22,8 +23,17 @@ from .data_util import (
 
 
 class PrinterCallbackMLFlow(TrainerCallback):
+
+    def __init__(self, log_stream):
+        self.log_stream=log_stream
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         logging.info(f"{logs}")
+        mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
+
+    def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        logging.info(f"{str(state.__str__())}")
+        mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
 
 class TransformerNerTrainer(Textflow_Trainer):
@@ -40,6 +50,17 @@ class TransformerNerTrainer(Textflow_Trainer):
         self.metric = load_metric("seqeval")
         logging.basicConfig(stream=self.log_stream, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                             level=logging.INFO)
+
+        self.output_folder_tmp=mkdtemp()
+
+
+    def log_metadata(self,labels_all):
+
+        logging.info(f'Get data cardinality: {json.dumps(self.cardinality)}')
+        mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
+        mlflow.log_text(json.dumps(self.cardinality), 'model/dataset_cardinality.json')
+
+        mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
     def train(self):
 
@@ -70,6 +91,7 @@ class TransformerNerTrainer(Textflow_Trainer):
 
                 #train, test = create_train_test_split(dataset, split=split)
                 #logging.info(f"Dataset Split( train:{len(train)},test:{len(test)}) {str(datetime.now())}")
+                logging.info(f'temporer folder: {self.output_folder_tmp}')
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
                 self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model)
@@ -82,7 +104,7 @@ class TransformerNerTrainer(Textflow_Trainer):
                 model.label2id = tag2id
 
                 args = TrainingArguments(
-                    output_dir="./results",
+                    output_dir=self.output_folder_tmp,
                     evaluation_strategy="epoch",
                     learning_rate=2e-5,
                     per_device_train_batch_size=batch_size,
@@ -101,7 +123,7 @@ class TransformerNerTrainer(Textflow_Trainer):
                     data_collator=data_collator,
                     tokenizer=self.tokenizer,
                     compute_metrics=self.compute_metrics,
-                    callbacks=[PrinterCallbackMLFlow]
+                    callbacks=[PrinterCallbackMLFlow(self.log_stream)]
                 )
 
                 trainer.train()
