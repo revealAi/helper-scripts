@@ -67,8 +67,8 @@ class TransformerNerTrainer(Textflow_Trainer):
                 mlflow.log_text(json.dumps(self.config), 'model/training_config.json')
                 mlflow.log_text(json.dumps(self.cardinality), 'model/dataset_cardinality.json')
 
-                train, test = create_train_test_split(dataset, split=split)
-                logging.info(f"Dataset Split( train:{len(train)},test:{len(test)}) {str(datetime.now())}")
+                #train, test = create_train_test_split(dataset, split=split)
+                #logging.info(f"Dataset Split( train:{len(train)},test:{len(test)}) {str(datetime.now())}")
                 mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
                 self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model)
@@ -133,6 +133,7 @@ class TransformerNerTrainer(Textflow_Trainer):
                 logging.info(f"Finished transformer NER model training: {str(datetime.now())}")
                 local_path = os.path.join(os.path.dirname(__file__), 'model_artifacts', 'infer.py')
                 mlflow.log_artifact(local_path=local_path, artifact_path="model")
+                mlflow.log_text(self.log_stream.getvalue(), 'logger.log')
 
             except Exception as error:
                 logging.info(str(error))
